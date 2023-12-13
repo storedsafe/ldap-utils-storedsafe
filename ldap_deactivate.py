@@ -4,33 +4,32 @@ Performs one or more LDAP searches and puts the returned mail attributes
 in the designated files along with a message for each row.
 
 Outputs and queries are specified in a json file with the following keys:
-    - server: Passed directly to the ldap3 Server object.
-        (https://ldap3.readthedocs.io/en/latest/server.html)
-    - connection: Passed directly to the ldap3 Connection object,
-        along with the already defined server object.
-        (https://ldap3.readthedocs.io/en/latest/connection.html)
-    - fields: List of attributes to output
-        - attribute: Name of attribute
-        - (optional) match: Only use matched values, optionally capture first group
-        - (optional) replace: List of search-replace values
-    - output: Array of outputs
-        - file_path: Path to the output file, will be parsed using datetime.strftime()
-            (https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes)
-        - suffix: Will be added after the email address as `{mail}{suffix}`.
-        - search_options: List where each element is passed as parameters for individual calls to the
-            ldap3 connection.extend.standard.paged_search() method.
-            (https://ldap3.readthedocs.io/en/latest/standard.html)
+    - ldap: LDAP-related parameters.
+        - server_parameters: Passed directly to the ldap3 Server object.
+            (https://ldap3.readthedocs.io/en/latest/server.html)
+        - connection: Passed directly to the ldap3 Connection object,
+            along with the already defined server object.
+            (https://ldap3.readthedocs.io/en/latest/connection.html)
+        - search: List of search configurations.
+            - search_options: List where each element is passed as parameters for individual calls to the
+                ldap3 connection.extend.standard.paged_search() method.
+                (https://ldap3.readthedocs.io/en/latest/standard.html)
+            - fields: List of attributes to output
+                - attribute: Name of attribute
+                - (optional) match: Only use matched values, optionally capture first regex group
+                - (optional) replace: List of search-replace values
+    - match: List of matching criteria.
+        - ldap: Attribute name from LDAP user to match
+        - storedsafe: Field name from StoredSafe user to match
 """
 
 __author__ = "Oscar Mattsson <oscar@storedsafe.com>"
 __version__ = "0.0.1"
-__date__ = "2023-11-28"
-__change__ = "2023-11-29"
+__date__ = "2023-12-13"
+__change__ = "2023-12-13"
 __license__ = "MIT"
 
-from pprint import pprint
 from pathlib import Path
-from datetime import datetime
 from argparse import ArgumentParser
 from ldap3 import Server, Connection
 from ldap3.core.exceptions import LDAPBindError, LDAPSocketOpenError
