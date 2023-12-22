@@ -33,7 +33,8 @@ from pathlib import Path
 from argparse import ArgumentParser
 from ldap3 import Server, Connection
 from ldap3.core.exceptions import LDAPBindError, LDAPSocketOpenError
-from storedsafe import StoredSafe
+from storedsafe import StoredSafe, TokenUndefinedException
+import tokenhandler
 import os
 import sys
 import logging
@@ -65,6 +66,7 @@ ERROR_CONFIG_JSON = 23
 
 ### Constants ###
 
+RC_PATH = Path.home() / '.storedsafe-client.rc'
 BIT_ACTIVE = 1 << 7
 
 
@@ -145,7 +147,7 @@ def get_storedsafe_users(api: StoredSafe):
     data = res.json()
     users = [
         user for user in data['CALLINFO']['users']
-        if user['status'] & BIT_ACTIVE > 0
+        if int(user['status']) & BIT_ACTIVE > 0
     ]
     LOGGER.info(f"Successfully fetched {len(users)} StoredSafe users.")
     return users
@@ -183,10 +185,10 @@ def deactivate_storedsafe_users(api: StoredSafe, users):
     Unset the active flag on the provided StoredSafe user accounts.
     """
     for user in users:
-        status = user['status'] ^ BIT_ACTIVE
+        status = int(user['status']) ^ BIT_ACTIVE
         LOGGER.info(f"Deactivating {user['username']} ({user['id']})")
         LOGGER.debug(
-            f"User: {user['id']}, Status: {user['status']} -> {status}")
+            f"User: {user['id']}, Status: {int(user['status'])} -> {status}")
         api.edit_user(user['id'], status=status)
 
 
@@ -205,6 +207,30 @@ def ldap_connect(server_params, connection_params):
     except Exception as e:
         _fatal_error(ERROR_CONNECT_UNEXPECTED,
                      f"Unexpected error while connecting to host ({e})")
+
+
+def storedsafe_login() -> StoredSafe:
+    if RC_PATH.is_file():
+        api = StoredSafe.from_rc(RC_PATH)
+        try:
+            res = api.check()
+            data = res.json()
+            if data['CALLINFO']['status'] == 'SUCCESS':
+                return api
+        except TokenUndefinedException:
+            LOGGER.info("No valid token found, logging in...")
+        else:
+            LOGGER.info("No token found, logging in...")
+    else:
+        LOGGER.info("No RC file found, logging in for the first time...")
+    _argv = sys.argv
+    sys.argv = ['tokenhandler', 'login']
+    _stdout = sys.stdout
+    sys.stdout = sys.stderr
+    tokenhandler.main()
+    sys.argv = _argv
+    sys.stdout = _stdout
+    return StoredSafe.from_rc(RC_PATH)
 
 
 def get_config(path):
@@ -250,7 +276,7 @@ def _run():
         config['ldap']['server_parameters'],
         config['ldap']['connection_parameters']
     )
-    api = StoredSafe.from_rc()
+    api = storedsafe_login()
 
     ldap_users = []
     for search_options in config['ldap']['search']:
