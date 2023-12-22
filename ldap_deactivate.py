@@ -21,12 +21,20 @@ Outputs and queries are specified in a json file with the following keys:
     - match: List of matching criteria.
         - ldap: Attribute name from LDAP user to match
         - storedsafe: Field name from StoredSafe user to match
+
+Logging levels can be adjusted using the `LOG_LEVEL` environment variable with the following options:
+    - CRITICAL
+    - ERROR
+    - WARNING
+    - INFO
+    - DEBUG
+    - NOTSET
 """
 
 __author__ = "Oscar Mattsson <oscar@storedsafe.com>"
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 __date__ = "2023-12-13"
-__change__ = "2023-12-13"
+__change__ = "2023-12-22"
 __license__ = "MIT"
 
 from pathlib import Path
