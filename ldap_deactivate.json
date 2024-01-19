@@ -1,42 +1,43 @@
 {
-    "ldap": {
-        "server_parameters": {
-            "host": "192.168.56.101",
-            "get_info": "NONE"
-        },
-        "connection_parameters": {
-            "user": "WORKLAB\\Administrator",
-            "password": "W1nd0wsPassw0rd"
-        },
-        "search": [
-            {
-                "search_options": [
-                    {
-                        "search_scope": "SUBTREE",
-                        "search_base": "OU=User Accounts,DC=worklab,DC=local",
-                        "search_filter": "(&(mail=*)(objectCategory=person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=2))",
-                        "paged_size": 100
-                    }
-                ],
-                "fields": [
-                    {
-                        "attribute": "mail"
-                    },
-                    {
-                        "attribute": "SAMAccountName"
-                    }
-                ]
-            }
-        ]
+  "ldap": {
+    "server_parameters": {
+      "host": "192.168.56.101",
+      "get_info": "NONE"
     },
-    "match": [
-        {
-            "ldap": "mail",
-            "storedsafe": "email"
-        },
-        {
-            "ldap": "SAMAccountName",
-            "storedsafe": "username"
-        }
+    "connection_parameters": {
+      "user": "WORKLAB\\Administrator",
+      "password": "W1nd0wsPassw0rd"
+    },
+    "search": [
+      {
+        "search_options": [
+          {
+            "search_scope": "SUBTREE",
+            "search_base": "OU=User Accounts,DC=worklab,DC=local",
+            "search_filter": "(&(mail=*)(objectCategory=person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=2))",
+            "paged_size": 100
+          }
+        ],
+        "fields": [
+          {
+            "attribute": "mail"
+          },
+          {
+            "attribute": "SAMAccountName"
+          }
+        ]
+      }
     ]
+  },
+  "convert": [
+    {
+      "ldap": "mail",
+      "storedsafe": "email"
+    },
+    {
+      "ldap": "SAMAccountName",
+      "storedsafe": "username"
+    }
+  ],
+  "match": ["email", "username"]
 }

@@ -1,8 +1,5 @@
-#!/usr/bin/python3
 """
-Performs one or more LDAP searches and puts the returned mail attributes
-in the designated files along with a message for each row.
-
+Searches for LDAP users and StoredSafe users based on the provided config.
 Outputs and queries are specified in a json file with the following keys:
     - ldap: LDAP-related parameters.
         - server_parameters: Passed directly to the ldap3 Server object.
@@ -21,6 +18,10 @@ Outputs and queries are specified in a json file with the following keys:
     - match: List of matching criteria.
         - ldap: Attribute name from LDAP user to match
         - storedsafe: Field name from StoredSafe user to match
+    - convert: List of fields that should be converted from LDAP terms to StoredSafe terms.
+        - ldap: Attribute name from LDAP user to match
+        - storedsafe: Field name from StoredSafe user to match
+    - match: List of fields that should match in StoredSafe-terms. See `convert`.
 
 Logging levels can be adjusted using the `LOG_LEVEL` environment variable with the following options:
     - CRITICAL
@@ -31,30 +32,45 @@ Logging levels can be adjusted using the `LOG_LEVEL` environment variable with t
     - NOTSET
 """
 
-__author__ = "Oscar Mattsson <oscar@storedsafe.com>"
-__version__ = "0.1.0"
-__date__ = "2023-12-13"
-__change__ = "2023-12-22"
-__license__ = "MIT"
-
+from typing import List
 from pathlib import Path
 from argparse import ArgumentParser
 from ldap3 import Server, Connection
 from ldap3.core.exceptions import LDAPBindError, LDAPSocketOpenError
 from storedsafe import StoredSafe, TokenUndefinedException
-import tokenhandler
+from . import tokenhandler
 import os
 import sys
 import logging
 import json
 import re
 
+### Helper Functions ###
+
+
+def get_logger(name):
+    """
+    Returns a logging object with the given name.
+    """
+    logger = logging.getLogger(name)
+    logger.setLevel(os.getenv('LOG_LEVEL') or logging.INFO)
+    return logger
+
+
+def fatal_error(code, msg):
+    """
+    Logs a message with log level ERROR and exits the application with
+    the provided exit code.
+    """
+    LOGGER.error(f"{code} {msg}")
+    sys.exit(code)
+
+
 ### Setup Logging ###
 
 
 logging.basicConfig()
-LOGGER = logging.getLogger('mail-list')
-LOGGER.setLevel(os.getenv('LOG_LEVEL') or logging.ERROR)
+LOGGER = get_logger('utils')
 
 
 ### Error codes ###
@@ -76,17 +92,6 @@ ERROR_CONFIG_JSON = 23
 
 RC_PATH = Path.home() / '.storedsafe-client.rc'
 BIT_ACTIVE = 1 << 7
-
-
-### Helper Functions ###
-
-def _fatal_error(code, msg):
-    """
-    Logs a message with log level ERROR and exits the application with
-    the provided exit code.
-    """
-    LOGGER.error(f"{code} {msg}")
-    sys.exit(code)
 
 
 ### Application ###
@@ -137,11 +142,11 @@ def get_ldap_users(conn, fields, search_options):
 
     except IndexError as e:
         LOGGER.debug(entry['attributes'])
-        _fatal_error(ERROR_OUTPUT_ATTRIBUTE,
-                     f"Invalid attribute ({e})")
+        fatal_error(ERROR_OUTPUT_ATTRIBUTE,
+                    f"Invalid attribute ({e})")
     except Exception as e:
-        _fatal_error(ERROR_OUTPUT_UNEXPECTED,
-                     f"Unexpected error while searching for users ({e})")
+        fatal_error(ERROR_OUTPUT_UNEXPECTED,
+                    f"Unexpected error while searching for users ({e})")
     else:
         LOGGER.info(f"Successfully fetched {len(ldap_users)} LDAP users.")
     return ldap_users
@@ -161,43 +166,36 @@ def get_storedsafe_users(api: StoredSafe):
     return users
 
 
-def get_matched_users(ldap_users, storedsafe_users, match_criteria):
+def ldap_to_storedsafe(ldap_users, convert_criteria: List[dict]):
+    """
+    Converts LDAP fields to StoredSafe fields based on the provided criteria.
+    """
+    converted_users = []
+    for ldap_user in ldap_users:
+        converted_users.append({
+            field['storedsafe']: ldap_user[field['ldap']][0]
+            for field in convert_criteria
+            if field['ldap'] in ldap_user
+        })
+    return converted_users
+
+
+def get_matched_users(converted_users, storedsafe_users, match_criteria):
     """
     Gets users matched from LDAP to StoredSafe based on the provided criteria.
     All criteria must match for the user to be considered a match.
     """
     matched_users = []
-    for deactivated_user in ldap_users:
+    for ldap_user in converted_users:
         for storedsafe_user in storedsafe_users:
             is_match = True
             # Match user only if all criteria match
-            for match_criterion in match_criteria:
-                d_values = deactivated_user[match_criterion['ldap']]
-                s_value = storedsafe_user[match_criterion['storedsafe']]
-                has_match = False
-                for value in d_values:
-                    if s_value == value:
-                        has_match = True
-                        break
-                if not has_match:
+            for key in match_criteria:
+                if ldap_user[key] != storedsafe_user[key]:
                     is_match = False
-                    break
             if is_match:
                 matched_users.append(storedsafe_user)
-    LOGGER.info(f"Matched {len(matched_users)} to be deactivated.")
     return matched_users
-
-
-def deactivate_storedsafe_users(api: StoredSafe, users):
-    """
-    Unset the active flag on the provided StoredSafe user accounts.
-    """
-    for user in users:
-        status = int(user['status']) ^ BIT_ACTIVE
-        LOGGER.info(f"Deactivating {user['username']} ({user['id']})")
-        LOGGER.debug(
-            f"User: {user['id']}, Status: {int(user['status'])} -> {status}")
-        api.edit_user(user['id'], status=status)
 
 
 def ldap_connect(server_params, connection_params):
@@ -208,13 +206,13 @@ def ldap_connect(server_params, connection_params):
     try:
         return Connection(server, **connection_params, auto_bind=True)
     except LDAPBindError as e:
-        _fatal_error(ERROR_CONNECT_BIND, f"Unable to authenticate ({e})")
+        fatal_error(ERROR_CONNECT_BIND, f"Unable to authenticate ({e})")
     except LDAPSocketOpenError as e:
-        _fatal_error(ERROR_CONNECT_TIMEOUT,
-                     f"Unable to reach host `{server.host}` ({e})")
+        fatal_error(ERROR_CONNECT_TIMEOUT,
+                    f"Unable to reach host `{server.host}` ({e})")
     except Exception as e:
-        _fatal_error(ERROR_CONNECT_UNEXPECTED,
-                     f"Unexpected error while connecting to host ({e})")
+        fatal_error(ERROR_CONNECT_UNEXPECTED,
+                    f"Unexpected error while connecting to host ({e})")
 
 
 def storedsafe_login() -> StoredSafe:
@@ -251,49 +249,33 @@ def get_config(path):
             config = json.load(f)
         return config
     except FileNotFoundError:
-        _fatal_error(ERROR_CONFIG_PATH, f"Invalid path `{path}`")
+        fatal_error(ERROR_CONFIG_PATH, f"Invalid path `{path}`")
     except json.decoder.JSONDecodeError as e:
-        _fatal_error(ERROR_CONFIG_JSON,
-                     f"Failed to parse JSON in config ({e})")
+        fatal_error(ERROR_CONFIG_JSON,
+                    f"Failed to parse JSON in config ({e})")
     except Exception as e:
-        _fatal_error(ERROR_CONFIG_UNEXPECTED,
-                     f"Unexpected error while reading config ({e})")
+        fatal_error(ERROR_CONFIG_UNEXPECTED,
+                    f"Unexpected error while reading config ({e})")
 
 
-def _run():
-    """
-    Main entry point for script.
-    """
-    arg_parser = ArgumentParser(
-        prog="Deactivate AD users in StoredSafe",
-        description="""
-        Deactivates all StoredSafe users that have been matched against a
-        deactivated user in Active Directory.
-        """,
-        epilog="""
-        Log level can be specified using the LOG_LEVEL environment variable
-        set as ERROR, WARNING or INFO.
-        """
-    )
-    arg_parser.add_argument('-c', '--config', required=True)
-    arg_parser.add_argument('-t', '--test', action="store_true")
-    args = arg_parser.parse_args()
-
-    config = get_config(args.config)
-    conn = ldap_connect(
+def run_search(config_path: str | Path) -> ((Connection, list), (StoredSafe, list), (list, list)):
+    config = get_config(config_path)
+    ldap = ldap_connect(
         config['ldap']['server_parameters'],
         config['ldap']['connection_parameters']
     )
-    api = storedsafe_login()
+    storedsafe = storedsafe_login()
 
     ldap_users = []
     for search_options in config['ldap']['search']:
-        ldap_users.extend(get_ldap_users(conn, **search_options))
-    storedsafe_users = get_storedsafe_users(api)
+        ldap_users.extend(get_ldap_users(ldap, **search_options))
+    storedsafe_users = get_storedsafe_users(storedsafe)
+    converted_users = ldap_to_storedsafe(ldap_users, config['convert'])
     matched_users = get_matched_users(
-        ldap_users, storedsafe_users, config['match'])
-    deactivate_storedsafe_users(api, matched_users)
+        converted_users, storedsafe_users, config['match'])
 
-
-if __name__ == '__main__':
-    _run()
+    return (
+        (ldap, ldap_users),
+        (storedsafe, storedsafe_users),
+        (converted_users, matched_users),
+    )

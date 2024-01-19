@@ -1,8 +1,8 @@
 #!/bin/bash
-if ! [ -f "tokenhandler.py" ]; then
+if ! [ -f "storedsafe_ldap_utils/tokenhandler.py" ]; then
     echo "[setup] Downloading StoredSafe tokenhandler..."
     git clone https://github.com/storedsafe/tokenhandler.git tokenhandler-git
-    mv tokenhandler-git/tokenhandler.py ./tokenhandler.py
+    mv tokenhandler-git/tokenhandler.py ./storedsafe_ldap_utils/tokenhandler.py
     rm -rf tokenhandler-git
 fi
 

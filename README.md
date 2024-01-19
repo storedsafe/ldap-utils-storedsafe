@@ -1,8 +1,14 @@
-# LDAP StoredSafe User Deactivation Script
+# LDAP Utils StoredSafe
 
-The `ldap_deactivate.py` script scans an LDAP directory for users that match the search options in the provided config file.
+**This project is a WIP and is subject to change.**
 
-See `ldap_deactivate.json` for an example configuration. Deactivated users can be found with the `userAccountControl:1.2.840.113556.1.4.803:=2` filter.
+This script collection provides a means to communicate between an LDAP server and StoredSafe.
+
+The following scripts are currently available:
+
+- deactivate
+  - Deactivates StoredSafe users that match the LDAP users found based on your configuration file.
+  - The filter `(userAccountControl:1.2.840.113556.1.4.803:=2)` can be used to detect deactivated users in LDAP.
 
 ## Requirements
 
@@ -24,19 +30,20 @@ To cleanup all downloaded dependencies, run `cleanup.sh`.
 ## Usage
 
 ```bash
-# Assuming your config file is called `config.json`
-python3 ldap_deactivate.py -c config.json
+# Deactivate users matching the criteria from config.json
+python3 -m ldap_utils_storedsafe deactivate -c config.json
 ```
 
 ## Logging
 
 Additional logging can be shown using the `LOG_LEVEL` environment variable with the following values:
-  - CRITICAL
-  - ERROR
-  - WARNING
-  - INFO
-  - DEBUG
-  - NOTSET
+
+- CRITICAL
+- ERROR
+- WARNING
+- INFO
+- DEBUG
+- NOTSET
 
 ```bash
 LOG_LEVEL=INFO python3 ldap_deactivate -c config.json
@@ -44,22 +51,25 @@ LOG_LEVEL=INFO python3 ldap_deactivate -c config.json
 
 ## Configuration
 
+See `ldap_deactivate.json` for an example configuration file.
+
 All available keys in the config files are described below:
 
 - **ldap**: LDAP-related parameters.
   - **server_parameters**: Passed directly to the ldap3 Server object.
-        (https://ldap3.readthedocs.io/en/latest/server.html)
+    (https://ldap3.readthedocs.io/en/latest/server.html)
   - **connection**: Passed directly to the ldap3 Connection object,
-        along with the already defined server object.
-        (https://ldap3.readthedocs.io/en/latest/connection.html)
+    along with the already defined server object.
+    (https://ldap3.readthedocs.io/en/latest/connection.html)
   - **search**: List of search configurations.
     - **search_options**: List where each element is passed as parameters for individual calls to the
-            ldap3 connection.extend.standard.paged_search() method.
-            (https://ldap3.readthedocs.io/en/latest/standard.html)
+      ldap3 connection.extend.standard.paged_search() method.
+      (https://ldap3.readthedocs.io/en/latest/standard.html)
     - **fields**: List of attributes to output
       - **attribute**: Name of attribute
       - (optional) **match**: Only use matched values, optionally capture first regex group
       - (optional) **replace**: List of search-replace values
-- **match**: List of matching criteria.
+- **convert**: List of criteria to convert LDAP fields to StoredSafe fields.
   - **ldap**: Attribute name from LDAP user to match
   - **storedsafe**: Field name from StoredSafe user to match
+- **match**: List of StoredSafe field names that need to match with the values from the LDAP users.
