@@ -8,7 +8,6 @@ The following scripts are currently available:
 
 - deactivate
   - Deactivates StoredSafe users that match the LDAP users found based on your configuration file.
-  - The filter `(userAccountControl:1.2.840.113556.1.4.803:=2)` can be used to detect deactivated users in LDAP.
 
 ## Requirements
 
@@ -73,3 +72,47 @@ All available keys in the config files are described below:
   - **ldap**: Attribute name from LDAP user to match
   - **storedsafe**: Field name from StoredSafe user to match
 - **match**: List of StoredSafe field names that need to match with the values from the LDAP users.
+
+
+## Example configurations
+
+### Searching
+
+#### Deactivated users
+
+Find people with an email address that have the deactivated flag set.
+```json
+{
+  "ldap": {
+    ...
+    "search": [
+      ...
+      {
+        ...
+        "search_options": [
+          {
+            ...
+            "search_filter": "(&(mail=*)(objectCategory=person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=2))",
+          }
+        ],
+      }
+    ]
+  }
+}
+```
+
+### Authentication
+
+#### Kerberos
+
+```json
+{
+  "ldap": {
+    ...
+    "connection_parameters": {
+      ...
+      "authentication": "SASL",
+      "sasl_mechanism": "GSSAPI"
+    }
+  }
+}
