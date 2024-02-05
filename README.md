@@ -103,7 +103,7 @@ Find people with an email address that have the deactivated flag set.
 
 ### Authentication
 
-#### Kerberos
+#### Kerberos/GSS
 
 ```json
 {
